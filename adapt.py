@@ -76,11 +76,13 @@ class MomentumSGD(object):
 
     def update(self, remd):
         params = self._extract_params(remd)
+        print params
         derivs = self.deriv_func(remd)
         lr = self.learn_func(self.step)
         self.v = self.momentum * self.v + lr * derivs
         self.derivs.append(self.v)
         params += self.v
+        print params
         self._update_params(remd, params)
         self.step += 1
 

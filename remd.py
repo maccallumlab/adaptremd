@@ -46,9 +46,12 @@ class RemdLadder(object):
                       else False)
 
             if accept:
+                print 'accepted', i, j
                 w1 = self.walkers[i]
                 w2 = self.walkers[j]
                 w1.x, w2.x = w2.x, w1.x
+            else:
+                print 'rejected', i, j
 
         self._update_stats()
 
