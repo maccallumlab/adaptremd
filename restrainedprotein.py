@@ -44,7 +44,7 @@ class RestrainedProtein(object):
         self.simulation.context.setPositions(inpcrd.positions)
 
         print('Minimizing energy for replica {}'.format(self.output_index))
-        self.simulation.minimizeEnergy(maxIterations=50)
+        self.simulation.minimizeEnergy()
 
         state = self.simulation.context.getState(getPositions=True,
                                                  getVelocities=True)

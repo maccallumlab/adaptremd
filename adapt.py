@@ -111,6 +111,7 @@ class Adaptor(object):
         self.optimizer = optimizer
         self.params = []
         self.params.append(self.optimizer._extract_params(self.remd))
+        self.acceptance = []
 
     def run(self, iterations):
         for _ in range(iterations):
@@ -119,4 +120,5 @@ class Adaptor(object):
 
             self.optimizer.update(self.remd)
             self.params.append(self.optimizer._extract_params(self.remd))
+            self.acceptance.append(self.remd.acceptance)
             self.remd.reset_stats()
