@@ -18,7 +18,8 @@ Spring = collections.namedtuple('Spring', 'i j r1 r2 r3 r4 force_const')
 
 class RestrainedProtein(object):
     def __init__(self, output_index, parm_path, crd_path, init_temp, init_k,
-                 variable_springs, fixed_springs, fixed_torsions, nsteps=500):
+                 variable_springs, fixed_springs, fixed_torsions, nsteps=500,
+                 output_steps=500, gpuid=None):
         self.output_index = output_index
         self.nsteps = nsteps
         self.temperature = init_temp
@@ -38,9 +39,16 @@ class RestrainedProtein(object):
         self.integrator = mm.LangevinIntegrator(self.temperature*u.kelvin,
                                            1.0/u.picoseconds,
                                            2.0*u.femtoseconds)
+
+        platform = mm.Platform.getPlatformByName('CUDA')
+        properties = {'CudaDeviceIndex': str(gpuid),
+                      'CudaPrecision': 'mixed'}
         self.simulation = app.Simulation(prmtop.topology,
                                          self.system,
-                                         self.integrator)
+                                         self.integrator,
+                                         platform,
+                                         properties)
+
         self.simulation.context.setPositions(inpcrd.positions)
 
         print('Minimizing energy for replica {}'.format(self.output_index))
@@ -53,8 +61,7 @@ class RestrainedProtein(object):
 
         # setup reporters to write everything to disk
         self.simulation.reporters.append(
-            app.PDBReporter('output_{}.pdb'.format(self.output_index),
-                                                         self.nsteps))
+            app.PDBReporter('output_{}.pdb'.format(self.output_index), output_steps))
 
 
     @property
@@ -80,7 +87,6 @@ class RestrainedProtein(object):
         self.vel *= math.sqrt(self.temperature / t)
 
     def update(self):
-        print('Running replica {}'.format(self.output_index))
         self.simulation.context.setPositions(self.pos)
         self.simulation.context.setVelocities(self.vel)
         self.simulation.step(self.nsteps)

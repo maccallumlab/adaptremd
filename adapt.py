@@ -104,6 +104,35 @@ class MomentumSGD(object):
             remd.walkers[i].params = params[i, :]
 
 
+class MomentumSGD2(object):
+    def __init__(self, momentum, deriv_func, learn_func):
+        self.momentum = momentum
+        self.learn_func = learn_func
+        self.deriv_func = deriv_func
+        self.step = 0
+        self.v = 0.0
+        self.derivs = []
+
+    def update(self, remd):
+        params = self._extract_params(remd)
+        derivs = self.deriv_func(remd)
+        lr = self.learn_func(self.step)
+        self.v = self.momentum * self.v + lr * derivs
+        self.derivs.append(self.v)
+        params += self.v
+        self._update_params(remd, params)
+        self.step += 1
+
+
+    @staticmethod
+    def _extract_params(remd):
+        return remd.params
+
+    @staticmethod
+    def _update_params(remd, params):
+        remd.params = params
+
+
 class Adaptor(object):
     def __init__(self, remd, n_steps, optimizer):
         self.remd = remd
