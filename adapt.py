@@ -76,13 +76,11 @@ class MomentumSGD(object):
 
     def update(self, remd):
         params = self._extract_params(remd)
-        print params
         derivs = self.deriv_func(remd)
         lr = self.learn_func(self.step)
         self.v = self.momentum * self.v + lr * derivs
         self.derivs.append(self.v)
         params += self.v
-        print params
         self._update_params(remd, params)
         self.step += 1
 
@@ -123,6 +121,90 @@ class MomentumSGD2(object):
         self._update_params(remd, params)
         self.step += 1
 
+    @staticmethod
+    def _extract_params(remd):
+        return remd.params
+
+    @staticmethod
+    def _update_params(remd, params):
+        remd.params = params
+
+
+class Adam(object):
+    def __init__(self, gamma1, gamma2, deriv_func, learn_func):
+        self.gamma1 = gamma1
+        self.gamma2 = gamma2
+        self.learn_func = learn_func
+        self.deriv_func = deriv_func
+        self.step = 0
+        self.m = 0.0
+        self.g = 0.0
+        self.derivs = []
+
+    def update(self, remd):
+        params = self._extract_params(remd)
+        derivs = self.deriv_func(remd)
+        lr = self.learn_func(self.step)
+
+        self.m = self.gamma1 * self.m + (1.0 - self.gamma1) * derivs
+        self.g = self.gamma2 * self.g + (1.0 - self.gamma2) * derivs**2
+
+        mhat = self.m / (1.0 - self.gamma1**(self.step + 1))
+        ghat = self.g / (1.0 - self.gamma2**(self.step + 1))
+
+        v = lr * mhat / (np.sqrt(ghat) + 1e-8)
+        self.derivs.append(v)
+        params += v
+        self._update_params(remd, params)
+
+        self.step += 1
+
+    @staticmethod
+    def _extract_params(remd):
+        n_reps = remd.n_walkers
+        n_params = remd.n_params
+
+        params = np.zeros((n_reps, n_params))
+        for i in range(n_reps):
+            params[i, :] = remd.walkers[i].params
+
+        return params
+
+    @staticmethod
+    def _update_params(remd, params):
+        n_reps = params.shape[0]
+        for i in range(n_reps):
+            remd.walkers[i].params = params[i, :]
+
+
+class Adam2(object):
+    def __init__(self, gamma1, gamma2, deriv_func, learn_func):
+        self.gamma1 = gamma1
+        self.gamma2 = gamma2
+        self.learn_func = learn_func
+        self.deriv_func = deriv_func
+        self.step = 0
+        self.m = 0.0
+        self.g = 0.0
+        self.derivs = []
+
+    def update(self, remd):
+        params = self._extract_params(remd)
+        derivs = self.deriv_func(remd)
+        lr = self.learn_func(self.step)
+
+        self.m = self.gamma1 * self.m + (1.0 - self.gamma1) * derivs
+        self.g = self.gamma2 * self.g + (1.0 - self.gamma2) * derivs**2
+
+        mhat = self.m / (1.0 - self.gamma1**(self.step + 1))
+        ghat = self.g / (1.0 - self.gamma2**(self.step + 1))
+
+        v = lr * mhat / (np.sqrt(ghat) + 1e-8)
+        self.derivs.append(v)
+
+        params += v
+        self._update_params(remd, params)
+        self.step += 1
 
     @staticmethod
     def _extract_params(remd):
