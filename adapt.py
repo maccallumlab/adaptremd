@@ -103,10 +103,11 @@ class MomentumSGD(object):
 
 
 class MomentumSGD2(object):
-    def __init__(self, momentum, deriv_func, learn_func):
+    def __init__(self, momentum, deriv_func, learn_func, param_bounds):
         self.momentum = momentum
         self.learn_func = learn_func
         self.deriv_func = deriv_func
+        self.param_bounds = param_bounds
         self.step = 0
         self.v = 0.0
         self.derivs = []
@@ -118,6 +119,11 @@ class MomentumSGD2(object):
         self.v = self.momentum * self.v + lr * derivs
         self.derivs.append(self.v)
         params += self.v
+
+        # make sure the parameters don't go outside of the specified bounds
+        params = np.maximum(params, self.param_bounds[0, :])
+        params = np.minimum(params, self.param_bounds[1, :])
+
         self._update_params(remd, params)
         self.step += 1
 
