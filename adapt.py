@@ -29,6 +29,29 @@ def compute_derivative_total_acc(remd):
     return derivs * A_total
 
 
+def compute_derivative_jensen(remd):
+    lower_derivs, upper_derivs = remd.derivs
+
+    derivs = np.zeros_like(lower_derivs)
+    n_replicas, n_params = derivs.shape
+
+    for i in range(n_replicas):
+        if i > 0:
+            dA = lower_derivs[i]
+            derivs[i] += dA
+
+        if i < n_replicas - 1:
+            dA = upper_derivs[i]
+            derivs[i] += dA
+
+    # we set the endpoint derivatives to zeros
+    # because they are fixed
+    derivs[0, :] = 0
+    derivs[-1, :] = 0
+
+    return derivs
+
+
 def compute_derivative_log_total_acc(remd):
     acc = remd.acceptance
 
@@ -72,10 +95,11 @@ class LearningRateDecay(object):
 
 
 class MomentumSGD(object):
-    def __init__(self, momentum, deriv_func, learn_func):
+    def __init__(self, momentum, deriv_func, learn_func, param_bounds):
         self.momentum = momentum
         self.learn_func = learn_func
         self.deriv_func = deriv_func
+        self.param_bounds = param_bounds
         self.step = 0
         self.v = 0.0
         self.derivs = []
@@ -87,6 +111,11 @@ class MomentumSGD(object):
         self.v = self.momentum * self.v + lr * derivs
         self.derivs.append(self.v)
         params += self.v
+
+        # make sure the parameters don't go outside of the specified bounds
+        params = np.maximum(params, self.param_bounds[0, :])
+        params = np.minimum(params, self.param_bounds[1, :])
+
         self._update_params(remd, params)
         self.step += 1
 
