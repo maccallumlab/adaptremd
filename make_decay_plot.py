@@ -5,7 +5,7 @@ from matplotlib import pyplot as pp
 from simplelandscape import (
     flat_energy, linear_energy, logistic_energy, quadratic_energy,
     umbrella_bias, OneDimLandscape)
-from remd import RemdLadder
+from remd import RemdLadder, RemdLadderJensen
 import adapt
 
 
@@ -23,10 +23,11 @@ for i, decay in enumerate(decays):
         w = OneDimLandscape(logistic_energy, umbrella_bias, x, p)
         walkers.append(w)
 
-    r = RemdLadder(walkers)
+    r = RemdLadderJensen(walkers)
 
     lr = adapt.LearningRateDecay(np.array((1.0, 0)), decay)
-    m = adapt.MomentumSGD(0.9, adapt.compute_derivative_log_total_acc, lr)
+    param_bounds = np.array([[0, 0.025], [1000, 0.025]])
+    m = adapt.MomentumSGD(0.9, adapt.compute_derivative_jensen, lr, param_bounds)
     a = adapt.Adaptor(r, 8, m)
 
     a.run(2000)

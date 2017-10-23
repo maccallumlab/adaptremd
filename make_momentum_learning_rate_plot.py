@@ -5,7 +5,7 @@ from matplotlib import pyplot as pp
 from simplelandscape import (
     flat_energy, linear_energy, logistic_energy, quadratic_energy,
     umbrella_bias, OneDimLandscape)
-from remd import RemdLadder
+from remd import RemdLadder, RemdLadderJensen
 import adapt
 
 
@@ -29,10 +29,12 @@ for i, momentum in enumerate(momentums):
             w = OneDimLandscape(logistic_energy, umbrella_bias, x, p)
             walkers.append(w)
 
-        r = RemdLadder(walkers)
+        r = RemdLadderJensen(walkers)
 
         lr = adapt.LearningRateDecay(np.array((learning_rate, 0)), 0)
-        m = adapt.MomentumSGD(momentum, adapt.compute_derivative_log_total_acc, lr)
+        param_bounds = np.array([[0, 0.025], [1000, 0.025]], dtype=float)
+        m = adapt.MomentumSGD(momentum, adapt.compute_derivative_jensen,
+                              lr, param_bounds)
         # lr = adapt.LearningRateDecay(np.array((20, 1e-3)), 1e-2)
         # m = adapt.Adam(0.99, 0.999, adapt.compute_derivative_log_total_acc, lr)
         a = adapt.Adaptor(r, 8, m)
@@ -41,9 +43,16 @@ for i, momentum in enumerate(momentums):
 
         params = np.array(a.params)
         axes[i, j].set_color_cycle([pp.cm.viridis(c) for c in np.linspace(0, 1, 8)])
-        axes[i, j].plot(params[:, :, 0])
+
+        if np.logical_or(params[:, :, 0] < 200, params[:, :, 0] > 800).any():
+            axes[i, j].text(0.5, 0.5, 'unstable', transform=axes[i, j].transAxes,
+                            horizontalalignment='center', verticalalignment='center')
+        else:
+            axes[i, j].plot(params[:, :, 0])
+
         axes[i, j].set_ylim(370, 630)
         axes[i, j].xaxis.set_major_locator(pp.FixedLocator([0, 1000, 2000]))
+
 
         plot_index += 1
 
@@ -63,8 +72,6 @@ for i, mom in enumerate(momentums):
             verticalalignment='center', weight='bold',
             rotation='vertical')
 
-axes[0, 3].text(0.50, 0.5, 'unstable', transform=axes[0,3].transAxes,
-                horizontalalignment='center', verticalalignment='center')
 
 pp.figtext(0.5, 0.95, u'Increasing Learning Rate \N{RIGHTWARDS ARROW}',
            horizontalalignment='center', weight='bold')
