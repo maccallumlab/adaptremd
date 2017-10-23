@@ -256,14 +256,14 @@ def run(nsteps, remd, learn, update_every, output_every, burn_in, fixed_torsions
 
 if __name__ == '__main__':
     init_params = np.zeros((8, 2))
-    # init_params[:, 0] = np.linspace(440, 450, 8)
-    # init_params[0, 0] = 300.0
-    init_params[:, 0] = 300.0
-    init_params[:, 1] = np.linspace(100.0, 0.0, 8)
-    r = remd.RemdLadder2(init_params)
-    lr = adapt.LearningRateDecay(np.array((0.0, 0.05)), 1e-2)
-    param_bounds = np.array([[300.0, 0.0], [300.0, 100.0]])
-    m = adapt.MomentumSGD2(0.9, adapt.compute_derivative_log_total_acc, lr, param_bounds)
+    init_params[:, 0] = np.linspace(440, 450, 8)
+    init_params[0, 0] = 300.0
+    # init_params[:, 0] = 300.0
+    # init_params[:, 1] = np.linspace(500.0, 0.0, 8)
+    r = remd.RemdLadderJensen2(init_params)
+    lr = adapt.LearningRateDecay(np.array((1.0, 0.0)), 1e-2)
+    param_bounds = np.array([[300.0, 0.0], [450.0, 100.0]])
+    m = adapt.MomentumSGD2(0.9, adapt.compute_derivative_jensen, lr, param_bounds)
     # m = adapt.Adam2(0.9, 0.999, adapt.compute_derivative_log_total_acc, lr, param_bounds)
 
     torsions = []
