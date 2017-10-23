@@ -36,7 +36,6 @@ def run_master(comm, nsteps, r, l, update_every, output_every, burn_in,
                              variable_bonds, fixed_bonds, fixed_torsions,
                              nsteps=500, output_steps=500*output_every,
                              gpuid=dev_id)
-
     # setup states
     states = [w.x] * n_replicas
 
@@ -260,42 +259,38 @@ if __name__ == '__main__':
     # init_params[:, 0] = np.linspace(440, 450, 8)
     # init_params[0, 0] = 300.0
     init_params[:, 0] = 300.0
-    init_params[:, 1] = np.linspace(500, 450, 8)
-    init_params[-1, 1] = 0.0
+    init_params[:, 1] = np.linspace(100.0, 0.0, 8)
     r = remd.RemdLadder2(init_params)
-    lr = adapt.LearningRateDecay(np.array((0.0, 8.0)), 1e-2)
-    param_bounds = np.array([[300.0, 0.0], [450.0, 500.0]])
+    lr = adapt.LearningRateDecay(np.array((0.0, 0.05)), 1e-2)
+    param_bounds = np.array([[300.0, 0.0], [300.0, 100.0]])
     m = adapt.MomentumSGD2(0.9, adapt.compute_derivative_log_total_acc, lr, param_bounds)
-    # m = adapt.Adam2(0.9, 0.999, adapt.compute_derivative_log_total_acc, lr)
+    # m = adapt.Adam2(0.9, 0.999, adapt.compute_derivative_log_total_acc, lr, param_bounds)
 
     torsions = []
     with open('torsions.dat') as infile:
         for line in infile:
             i, j, k, l, theta0, delta = line.split()
-            i, j, k, l = [int(x) for x in (i, j, k, l)]
+            i, j, k, l = [int(x) - 1 for x in (i, j, k, l)]
             theta0 = float(theta0)
             delta = float(delta)
             torsions.append((i, j, k, l, theta0, delta))
 
     fixed_bonds = []
-    with open('fixed_bonds.dat') as infile:
-        for line in infile:
-            i, j, r1, r2, r3, r4 = line.split()
-            i = int(i)
-            j = int(j)
-            r1, r2, r3, r4 = [float(x) for x in [r1, r2, r3, r4]]
-            fixed_bonds.append((i, j, r1, r2, r3, r4))
 
     variable_bonds = []
     for i in range(1):
         bond_list = []
         with open('variable_bonds{}.dat'.format(i)) as infile:
             for line in infile:
-                i, j, r1, r2, r3, r4 = line.split()
-                i = int(i)
-                j = int(j)
-                r1, r2, r3, r4 = [float(x) for x in [r1, r2, r3, r4]]
-                bond_list.append((i, j, r1, r2, r3, r4))
+                i, j, d = line.split()
+                i = int(i) - 1
+                j = int(j) - 1
+                d = float(d)
+                d1 = max(0.0, d - 0.1)
+                d2 = d
+                d3 = d
+                d4 = d + 0.1
+                bond_list.append((i, j, d1, d2, d3, d4))
         variable_bonds.append(bond_list)
 
     run(10000, r, m, update_every=10, output_every=10, burn_in=10, fixed_torsions=None,

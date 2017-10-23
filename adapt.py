@@ -40,13 +40,19 @@ def compute_derivative_log_total_acc(remd):
     for i in range(n_replicas):
         if i > 0:
             A = acc[i - 1]
-            dA = lower_derivs[i]
-            derivs[i] += dA / A
+            if A < 1e-99:
+                derivs[i] += 0.0
+            else:
+                dA = lower_derivs[i]
+                derivs[i] += dA / A
 
         if i < n_replicas - 1:
             A = acc[i]
-            dA = upper_derivs[i]
-            derivs[i] += dA / A
+            if A < 1e-99:
+                derivs[i] += 0.0
+            else:
+                dA = upper_derivs[i]
+                derivs[i] += dA / A
 
     # we set the endpoint derivatives to zeros
     # because they are fixed
@@ -184,11 +190,12 @@ class Adam(object):
 
 
 class Adam2(object):
-    def __init__(self, gamma1, gamma2, deriv_func, learn_func):
+    def __init__(self, gamma1, gamma2, deriv_func, learn_func, param_bounds):
         self.gamma1 = gamma1
         self.gamma2 = gamma2
         self.learn_func = learn_func
         self.deriv_func = deriv_func
+        self.param_bounds = param_bounds
         self.step = 0
         self.m = 0.0
         self.g = 0.0
@@ -209,6 +216,10 @@ class Adam2(object):
         self.derivs.append(v)
 
         params += v
+        # make sure the parameters don't go outside of the specified bounds
+        params = np.maximum(params, self.param_bounds[0, :])
+        params = np.minimum(params, self.param_bounds[1, :])
+
         self._update_params(remd, params)
         self.step += 1
 
