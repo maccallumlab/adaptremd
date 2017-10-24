@@ -56,7 +56,7 @@ def compute_derivative_jensen_pen(remd):
     # computes derivative of:
     # sum_i(alpha1 <ln_A_i> + alpha2 (<ln_A_i> - mean_ln_A>)^2)
 
-    alpha1 = 1.0
+    alpha1 = 0.0
     alpha2 = 1.0
 
     lower_derivs, upper_derivs = remd.derivs
@@ -64,26 +64,22 @@ def compute_derivative_jensen_pen(remd):
     n_replicas, n_params = derivs.shape
 
     ln_A_lower, ln_A_upper = remd.ln_A
-    mean_ln_A =  np.sum(ln_A_lower) / (n_replicas - 1)
-
-    d_mean_ln_A = 1.0 / (n_replicas - 1) * (lower_derivs + upper_derivs)
-
-
+    mean_ln_A = np.sum(ln_A_lower) / (n_replicas - 1)
 
     for i in range(n_replicas):
         if i > 0:
             dA = lower_derivs[i]
-            x = ln_A_lower[i] - mean_ln_A
-            y = dA - d_mean_ln_A[i]
+            x = alpha1
+            y = 2. * alpha2 * (ln_A_lower[i] - mean_ln_A)
 
-            derivs[i] += alpha1 * dA - alpha2 * 2 * x * y
+            derivs[i] += (x - y) * dA
 
         if i < n_replicas - 1:
             dA = upper_derivs[i]
-            x = ln_A_upper[i] - mean_ln_A
-            y = dA - d_mean_ln_A[i]
+            x = alpha1
+            y = 2. * alpha2 * (ln_A_upper[i] - mean_ln_A)
 
-            derivs[i] += alpha1 * dA - alpha2 * 2 * x * y
+            derivs[i] += (x - y) * dA
 
     # we set the endpoint derivatives to zeros
     # because they are fixed
@@ -208,11 +204,12 @@ class MomentumSGD2(object):
 
 
 class Adam(object):
-    def __init__(self, gamma1, gamma2, deriv_func, learn_func):
+    def __init__(self, gamma1, gamma2, deriv_func, learn_func, param_bounds):
         self.gamma1 = gamma1
         self.gamma2 = gamma2
         self.learn_func = learn_func
         self.deriv_func = deriv_func
+        self.param_bounds = param_bounds
         self.step = 0
         self.m = 0.0
         self.g = 0.0
@@ -232,6 +229,10 @@ class Adam(object):
         v = lr * mhat / (np.sqrt(ghat) + 1e-8)
         self.derivs.append(v)
         params += v
+
+        params = np.maximum(params, self.param_bounds[0, :])
+        params = np.minimum(params, self.param_bounds[1, :])
+
         self._update_params(remd, params)
 
         self.step += 1
