@@ -52,6 +52,47 @@ def compute_derivative_jensen(remd):
     return derivs
 
 
+def compute_derivative_jensen_pen(remd):
+    # computes derivative of:
+    # sum_i(alpha1 <ln_A_i> + alpha2 (<ln_A_i> - mean_ln_A>)^2)
+
+    alpha1 = 1.0
+    alpha2 = 1.0
+
+    lower_derivs, upper_derivs = remd.derivs
+    derivs = np.zeros_like(lower_derivs)
+    n_replicas, n_params = derivs.shape
+
+    ln_A_lower, ln_A_upper = remd.ln_A
+    mean_ln_A =  np.sum(ln_A_lower) / (n_replicas - 1)
+
+    d_mean_ln_A = 1.0 / (n_replicas - 1) * (lower_derivs + upper_derivs)
+
+
+
+    for i in range(n_replicas):
+        if i > 0:
+            dA = lower_derivs[i]
+            x = ln_A_lower[i] - mean_ln_A
+            y = dA - d_mean_ln_A[i]
+
+            derivs[i] += alpha1 * dA - alpha2 * 2 * x * y
+
+        if i < n_replicas - 1:
+            dA = upper_derivs[i]
+            x = ln_A_upper[i] - mean_ln_A
+            y = dA - d_mean_ln_A[i]
+
+            derivs[i] += alpha1 * dA - alpha2 * 2 * x * y
+
+    # we set the endpoint derivatives to zeros
+    # because they are fixed
+    derivs[0, :] = 0
+    derivs[-1, :] = 0
+
+    return derivs
+
+
 def compute_derivative_log_total_acc(remd):
     acc = remd.acceptance
 
