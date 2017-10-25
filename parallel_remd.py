@@ -9,6 +9,7 @@ import numpy as np
 import remd
 import restrainedprotein as rp
 import adapt
+import time
 
 
 #
@@ -24,14 +25,14 @@ sys.excepthook = mpi_excepthook
 
 
 def run_master(comm, nsteps, r, l, update_every, output_every, burn_in,
-               fixed_torsions, fixed_bonds, variable_bonds):
-    n_replicas = init_params.shape[0]
+               fixed_torsions, fixed_bonds, variable_bonds, topname, crdname):
+    n_replicas = r.n_walkers
     comm.barrier()
     print('Starting replica exchange')
     dev_id = negotiate_device_id(comm)
 
     # create walker on device
-    w = rp.RestrainedProtein(comm.rank, 'topol.top', 'inpcrd.crd',
+    w = rp.RestrainedProtein(comm.rank, topname, crdname,
                              300.0, np.array([0.0] * len(variable_bonds)),
                              variable_bonds, fixed_bonds, fixed_torsions,
                              nsteps=500, output_steps=500*output_every,
@@ -44,6 +45,10 @@ def run_master(comm, nsteps, r, l, update_every, output_every, burn_in,
     param_history.append(r.params.copy())
     accept_history = []
 
+    # setup walker history
+    walker_perm = list(range(n_replicas))
+    perm_hist = []
+
     for step in range(1, nsteps+1):
         comm.barrier()
 
@@ -55,39 +60,61 @@ def run_master(comm, nsteps, r, l, update_every, output_every, burn_in,
         print('Running {} of {}'.format(step, nsteps))
 
         # get state and parameters from master
+        t1 = time.time()
         package = [(s, p) for s, p in zip(states, params)]
         s, p = scatter_state_params(comm, package)
         w.x = s
         w.params = p
+        t2 = time.time()
+        print('scatter_state_params {}'.format(t2 - t1))
 
         # simulate
+        t1 = time.time()
         w.update()
+        t2 = time.time()
+        print('update {}'.format(t2 - t1))
 
         # get states from slaves
+        t1 = time.time()
         states = gather_state(comm, w.x)
+        t2 = time.time()
+        print('gather_state {}'.format(t2 - t1))
 
         # get list of states and parameters from master
+        t1 = time.time()
         package = [(states, p) for p in params]
         test_states, p = scatter_states_for_energy_deriv(comm, package)
+        t2 = time.time()
+        print('scatter_states_for_energy_deriv {}'.format(t2 - t1))
 
         # compute energies and derivs
+        t1 = time.time()
         energies = []
         derivs = []
         for s in test_states:
             energies.append(w.get_trial_energy(s))
             derivs.append(w.get_trial_derivs(s))
+        t2 = time.time()
+        print('calculate energies and derivs {}'.format(t2 - t1))
 
         # gather energies and derivs
+        t1 = time.time()
         package = gather_energy_deriv(comm, (energies, derivs))
         energy_matrix = np.array([p[0] for p in package])
         deriv_matrix = np.array([p[1] for p in package])
+        t2 = time.time()
+        print('gather_energy_deriv {}'.format(t2 - t1))
 
         # do remd
         perm = r.update(energy_matrix, deriv_matrix)
         new_states = []
+        new_walker_perm = []
         for p in perm:
             new_states.append(states[p])
+            new_walker_perm.append(walker_perm[p])
         states = new_states
+        walker_perm = new_walker_perm
+        perm_hist.append(walker_perm)
 
         # reset after burn-in period
         if not ((step - burn_in) % (update_every + burn_in)):
@@ -110,17 +137,20 @@ def run_master(comm, nsteps, r, l, update_every, output_every, burn_in,
             with open('derivs.pkl', 'w') as outfile:
                 pickle.dump(l.derivs, outfile)
 
+            with open('perm.pkl', 'w') as outfile:
+                pickle.dump(perm_hist, outfile)
+
             r.reset_stats()
 
 
 
 
-def run_slave(comm, nsteps, output_every, fixed_torsions, fixed_bonds, variable_bonds):
+def run_slave(comm, nsteps, output_every, fixed_torsions, fixed_bonds, variable_bonds, topname, crdname):
     comm.barrier()
     dev_id = negotiate_device_id(comm)
 
     # create walker on device
-    w = rp.RestrainedProtein(comm.rank, 'topol.top', 'inpcrd.crd',
+    w = rp.RestrainedProtein(comm.rank, topname, crdname,
                              300.0, np.array([0.0] * len(variable_bonds)),
                              variable_bonds, fixed_bonds, fixed_torsions, nsteps=500,
                              output_steps=500*output_every,
@@ -239,7 +269,7 @@ def negotiate_device_id(comm):
 
 
 def run(nsteps, remd, learn, update_every, output_every, burn_in, fixed_torsions=None, fixed_bonds=None,
-        variable_bonds=None):
+        variable_bonds=None, topname='topol.top', crdname='inpcrd.crd'):
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
 
@@ -249,22 +279,23 @@ def run(nsteps, remd, learn, update_every, output_every, burn_in, fixed_torsions
 
     if rank == 0:
         run_master(comm, nsteps, remd, learn, update_every, output_every, burn_in,
-                   fixed_torsions, fixed_bonds, variable_bonds)
+                   fixed_torsions, fixed_bonds, variable_bonds, topname, crdname)
     else:
-        run_slave(comm, nsteps, output_every, fixed_torsions, fixed_bonds, variable_bonds)
+        run_slave(comm, nsteps, output_every, fixed_torsions, fixed_bonds, variable_bonds, topname, crdname)
 
 
 if __name__ == '__main__':
     init_params = np.zeros((8, 2))
     init_params[:, 0] = np.linspace(440, 450, 8)
     init_params[0, 0] = 300.0
+    param_bounds = np.array([[300.0, 0.0], [450.0, 100.0]])
     # init_params[:, 0] = 300.0
     # init_params[:, 1] = np.linspace(500.0, 0.0, 8)
     r = remd.RemdLadderJensen2(init_params)
-    lr = adapt.LearningRateDecay(np.array((1.0, 0.0)), 1e-2)
-    param_bounds = np.array([[300.0, 0.0], [450.0, 100.0]])
-    m = adapt.MomentumSGD2(0.9, adapt.compute_derivative_jensen, lr, param_bounds)
-    # m = adapt.Adam2(0.9, 0.999, adapt.compute_derivative_log_total_acc, lr, param_bounds)
+    # lr = adapt.LearningRateDecay(np.array((1e-3, 0.0)), 1e-2)
+    # m = adapt.MomentumSGD2(0.9, adapt.compute_derivative_jensen_pen, lr, param_bounds)
+    lr = adapt.LearningRateDecay(np.array((2, 0.0)), 1e-2)
+    m = adapt.Adam2(0.9, 0.999, adapt.compute_derivative_jensen_pen, lr, param_bounds)
 
     torsions = []
     with open('torsions.dat') as infile:
@@ -293,5 +324,5 @@ if __name__ == '__main__':
                 bond_list.append((i, j, d1, d2, d3, d4))
         variable_bonds.append(bond_list)
 
-    run(10000, r, m, update_every=10, output_every=10, burn_in=10, fixed_torsions=None,
+    run(100000, r, m, update_every=2, output_every=2, burn_in=2, fixed_torsions=None,
         fixed_bonds=None, variable_bonds=variable_bonds)

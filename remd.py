@@ -432,6 +432,10 @@ class RemdLadderJensen2(object):
         return self._acc / self.n_trials
 
     @property
+    def ln_A(self):
+        return (self._lnA_lower / self.n_trials,
+                self._lnA_upper / self.n_trials)
+    @property
     def derivs(self):
         upper = (self._d_lnA_upper / self.n_trials -
                  self._dE_lnA_upper / self.n_trials +

@@ -56,8 +56,8 @@ def compute_derivative_jensen_pen(remd):
     # computes derivative of:
     # sum_i(alpha1 <ln_A_i> + alpha2 (<ln_A_i> - mean_ln_A>)^2)
 
-    alpha1 = 0.0
-    alpha2 = 1.0
+    alpha1 = 1.0
+    alpha2 = 0.0
 
     lower_derivs, upper_derivs = remd.derivs
     derivs = np.zeros_like(lower_derivs)
