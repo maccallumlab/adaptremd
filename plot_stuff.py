@@ -10,10 +10,13 @@ pp.figure(figsize=(10, 10))
 while True:
     pp.clf()
 
-    accept = np.array(pickle.load(open('accept.pkl')))
-    params = np.array(pickle.load(open('params.pkl')))
-    derivs = np.array(pickle.load(open('derivs.pkl')))
-    perms = np.array(pickle.load(open('perm.pkl')))
+    try:
+        accept = np.array(pickle.load(open('accept.pkl')))
+        params = np.array(pickle.load(open('params.pkl')))
+        derivs = np.array(pickle.load(open('derivs.pkl')))
+        perms = np.array(pickle.load(open('perm.pkl')))
+    except ValueError:
+        pass
 
     pp.subplot(4, 2, 1)
     pp.plot(params[:, :, 0])
@@ -32,9 +35,9 @@ while True:
     pp.title('derivs1')
 
     pp.subplot(4, 2, 5)
-    y = pd.rolling_mean((accept), 25)
+    y = pd.rolling_mean((accept), 1)
     pp.plot(y)
-    # pp.ylim(-0.05, 1.05)
+    pp.ylim(-0.05, 1.05)
     pp.title('mean accept')
 
     pp.subplot(4, 2, 6)
