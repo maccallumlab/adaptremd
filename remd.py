@@ -36,7 +36,6 @@ class RemdLadder(object):
         for w in self.walkers:
             w.update()
 
-
         for _ in range(self.n_exchanges):
             i = random.choice(range(self.n_walkers - 1))
             j = i + 1
