@@ -56,8 +56,8 @@ def compute_derivative_jensen_pen(remd):
     # computes derivative of:
     # sum_i(alpha1 <ln_A_i> + alpha2 (<ln_A_i> - mean_ln_A>)^2)
 
-    alpha1 = 1.0
-    alpha2 = 0.0
+    alpha1 = 0.0
+    alpha2 = 1.0
 
     lower_derivs, upper_derivs = remd.derivs
     derivs = np.zeros_like(lower_derivs)
@@ -266,6 +266,7 @@ class Adam2(object):
         self.m = 0.0
         self.g = 0.0
         self.derivs = []
+        self.vs = []
 
     def update(self, remd):
         params = self._extract_params(remd)
@@ -279,7 +280,8 @@ class Adam2(object):
         ghat = self.g / (1.0 - self.gamma2**(self.step + 1))
 
         v = lr * mhat / (np.sqrt(ghat) + 1e-8)
-        self.derivs.append(v)
+        self.vs.append(v)
+        self.derivs.append(derivs)
 
         params += v
         # make sure the parameters don't go outside of the specified bounds

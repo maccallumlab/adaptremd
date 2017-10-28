@@ -27,7 +27,6 @@ sys.excepthook = mpi_excepthook
 def run_master(comm, nsteps, r, l, update_every, output_every, burn_in,
                fixed_torsions, fixed_bonds, variable_bonds, topname, crdname):
     n_replicas = r.n_walkers
-    comm.barrier()
     print('Starting replica exchange')
     dev_id = negotiate_device_id(comm)
 
@@ -50,8 +49,6 @@ def run_master(comm, nsteps, r, l, update_every, output_every, burn_in,
     perm_hist = []
 
     for step in range(1, nsteps+1):
-        comm.barrier()
-
         # update our parameters
         params = []
         for i in range(n_replicas):
@@ -82,10 +79,14 @@ def run_master(comm, nsteps, r, l, update_every, output_every, burn_in,
 
         # get list of states and parameters from master
         t1 = time.time()
-        package = [(states, p) for p in params]
-        test_states, p = scatter_states_for_energy_deriv(comm, package)
+        test_states = broadcast_states_for_energy_deriv(comm, states)
         t2 = time.time()
-        print('scatter_states_for_energy_deriv {}'.format(t2 - t1))
+        print('broadcast_states_for_energy_deriv {}'.format(t2 - t1))
+
+        t1 = time.time()
+        p = scatter_params_for_energy_deriv(comm, params)
+        t2 = time.time()
+        print('scatter_params_for_energy_deriv {}'.format(t2 - t1))
 
         # compute energies and derivs
         t1 = time.time()
@@ -143,10 +144,7 @@ def run_master(comm, nsteps, r, l, update_every, output_every, burn_in,
             r.reset_stats()
 
 
-
-
 def run_slave(comm, nsteps, output_every, fixed_torsions, fixed_bonds, variable_bonds, topname, crdname):
-    comm.barrier()
     dev_id = negotiate_device_id(comm)
 
     # create walker on device
@@ -157,8 +155,6 @@ def run_slave(comm, nsteps, output_every, fixed_torsions, fixed_bonds, variable_
                              gpuid=dev_id)
 
     for step in range(nsteps):
-        comm.barrier()
-
         # get pos, vel, and parameters from master
         s, p = scatter_state_params(comm)
         w.x = s
@@ -171,7 +167,8 @@ def run_slave(comm, nsteps, output_every, fixed_torsions, fixed_bonds, variable_
         gather_state(comm, w.x)
 
         # get list of states and parameters from master
-        test_states, p = scatter_states_for_energy_deriv(comm)
+        test_states = broadcast_states_for_energy_deriv(comm)
+        p = scatter_params_for_energy_deriv(comm)
 
         # compute energies and derivs
         energies = []
@@ -195,9 +192,11 @@ def gather_state(comm, state):
     return comm.gather(state, root=0)
 
 
-def scatter_states_for_energy_deriv(comm, package=None):
-    return comm.scatter(package, root=0)
+def broadcast_states_for_energy_deriv(comm, package=None):
+    return comm.bcast(package, root=0)
 
+def scatter_params_for_energy_deriv(comm, package=None):
+    return comm.scatter(package, root=0)
 
 def gather_energy_deriv(comm, package):
     return comm.gather(package, root=0)
@@ -268,9 +267,8 @@ def negotiate_device_id(comm):
     return device_id
 
 
-def run(nsteps, remd, learn, update_every, output_every, burn_in, fixed_torsions=None, fixed_bonds=None,
+def run(comm, nsteps, remd, learn, update_every, output_every, burn_in, fixed_torsions=None, fixed_bonds=None,
         variable_bonds=None, topname='topol.top', crdname='inpcrd.crd'):
-    comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
 
     fixed_torsions = fixed_torsions if fixed_torsions else []
@@ -280,6 +278,7 @@ def run(nsteps, remd, learn, update_every, output_every, burn_in, fixed_torsions
     if rank == 0:
         run_master(comm, nsteps, remd, learn, update_every, output_every, burn_in,
                    fixed_torsions, fixed_bonds, variable_bonds, topname, crdname)
+        print(remd.acceptance)
     else:
         run_slave(comm, nsteps, output_every, fixed_torsions, fixed_bonds, variable_bonds, topname, crdname)
 
