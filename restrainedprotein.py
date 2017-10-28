@@ -99,8 +99,8 @@ class RestrainedProtein(object):
 
         state = self.simulation.context.getState(getPositions=True,
                                                  getVelocities=True)
-        self.pos = state.getPositions()
-        self.vel = state.getVelocities()
+        self.pos = state.getPositions(asNumpy=True)
+        self.vel = state.getVelocities(asNumpy=True)
 
         # setup reporters to write everything to disk
         self.simulation.reporters.append(
@@ -139,8 +139,8 @@ class RestrainedProtein(object):
         self.simulation.step(self.nsteps)
         state = self.simulation.context.getState(getPositions=True,
                                                  getVelocities=True)
-        self.pos = state.getPositions()
-        self.vel = state.getVelocities()
+        self.pos = state.getPositions(asNumpy=True)
+        self.vel = state.getVelocities(asNumpy=True)
 
     def get_energy(self):
         return self.get_trial_energy((self.pos, self.vel, self.temperature))
