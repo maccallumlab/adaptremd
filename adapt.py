@@ -29,68 +29,8 @@ def compute_derivative_total_acc(remd):
     return derivs * A_total
 
 
-def compute_derivative_jensen(remd):
-    lower_derivs, upper_derivs = remd.derivs
-
-    derivs = np.zeros_like(lower_derivs)
-    n_replicas, n_params = derivs.shape
-
-    for i in range(n_replicas):
-        if i > 0:
-            dA = lower_derivs[i]
-            derivs[i] += dA
-
-        if i < n_replicas - 1:
-            dA = upper_derivs[i]
-            derivs[i] += dA
-
-    # we set the endpoint derivatives to zeros
-    # because they are fixed
-    derivs[0, :] = 0
-    derivs[-1, :] = 0
-
-    return derivs
-
-
-def compute_derivative_jensen_pen(remd):
-    # computes derivative of:
-    # sum_i(alpha1 <ln_A_i> + alpha2 (<ln_A_i> - mean_ln_A>)^2)
-
-    alpha1 = 0.0
-    alpha2 = 1.0
-
-    lower_derivs, upper_derivs = remd.derivs
-    derivs = np.zeros_like(lower_derivs)
-    n_replicas, n_params = derivs.shape
-
-    ln_A_lower, ln_A_upper = remd.ln_A
-    mean_ln_A = np.sum(ln_A_lower) / (n_replicas - 1)
-
-    for i in range(n_replicas):
-        if i > 0:
-            dA = lower_derivs[i]
-            x = alpha1
-            y = 2. * alpha2 * (ln_A_lower[i] - mean_ln_A)
-
-            derivs[i] += (x - y) * dA
-
-        if i < n_replicas - 1:
-            dA = upper_derivs[i]
-            x = alpha1
-            y = 2. * alpha2 * (ln_A_upper[i] - mean_ln_A)
-
-            derivs[i] += (x - y) * dA
-
-    # we set the endpoint derivatives to zeros
-    # because they are fixed
-    derivs[0, :] = 0
-    derivs[-1, :] = 0
-
-    return derivs
-
-
 def compute_derivative_log_total_acc(remd):
-    acc = remd.acceptance
+    acc = remd.acceptance + 1e-6
 
     lower_derivs, upper_derivs = remd.derivs
 
@@ -105,7 +45,6 @@ def compute_derivative_log_total_acc(remd):
 
         if i < n_replicas - 1:
             A = acc[i]
-            derivs[i] += 0.0
             dA = upper_derivs[i]
             derivs[i] += dA / A
 
@@ -116,6 +55,40 @@ def compute_derivative_log_total_acc(remd):
 
     return derivs
 
+
+def compute_derivative_log_total_acc_pen(remd):
+    alpha1 = 1.0
+    alpha2 = 1.0
+
+    acc = remd.acceptance + 1e-6
+
+    lower_derivs, upper_derivs = remd.derivs
+
+    derivs = np.zeros_like(lower_derivs)
+    n_replicas, n_params = derivs.shape
+
+    eps = 0
+    for i in range(n_replicas):
+        if i > 0:
+            A = acc[i - 1] + eps
+            dA = lower_derivs[i]
+            x = alpha1
+            y = 2. * alpha2 * (np.log(A) - np.log(np.mean(acc)))
+            derivs[i] += (x - y) * dA / A
+
+        if i < n_replicas - 1:
+            A = acc[i] + eps
+            dA = upper_derivs[i]
+            x = alpha1
+            y = 2. * alpha2 * (np.log(A) - np.log(np.mean(acc)))
+            derivs[i] += (x - y) * dA / A
+
+    # we set the endpoint derivatives to zeros
+    # because they are fixed
+    derivs[0, :] = 0
+    derivs[-1, :] = 0
+
+    return derivs
 
 class LearningRateDecay(object):
     def __init__(self, initial_rate, decay):
@@ -135,13 +108,15 @@ class MomentumSGD(object):
         self.step = 0
         self.v = 0.0
         self.derivs = []
+        self.vs = []
 
     def update(self, remd):
         params = self._extract_params(remd)
         derivs = self.deriv_func(remd)
         lr = self.learn_func(self.step)
         self.v = self.momentum * self.v + lr * derivs
-        self.derivs.append(self.v)
+        self.derivs.append(derivs)
+        self.vs.append(self.v)
         params += self.v
 
         # make sure the parameters don't go outside of the specified bounds
@@ -214,6 +189,7 @@ class Adam(object):
         self.m = 0.0
         self.g = 0.0
         self.derivs = []
+        self.vs = []
 
     def update(self, remd):
         params = self._extract_params(remd)
@@ -227,7 +203,8 @@ class Adam(object):
         ghat = self.g / (1.0 - self.gamma2**(self.step + 1))
 
         v = lr * mhat / (np.sqrt(ghat) + 1e-8)
-        self.derivs.append(v)
+        self.vs.append(v)
+        self.vs.append(derivs)
         params += v
 
         params = np.maximum(params, self.param_bounds[0, :])
