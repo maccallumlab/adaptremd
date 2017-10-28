@@ -201,7 +201,6 @@ def scatter_params_for_energy_deriv(comm, package=None):
 def gather_energy_deriv(comm, package):
     return comm.gather(package, root=0)
 
-
 def negotiate_device_id(comm):
     hostname = platform.node()
     try:
