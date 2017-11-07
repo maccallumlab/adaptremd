@@ -4,7 +4,7 @@ import random
 
 
 class RemdLadder(object):
-    def __init__(self, walkers, n_exchanges=None):
+    def __init__(self, walkers, n_exchanges=None, eps=1e-9):
         self.walkers = walkers
         self.n_walkers = len(walkers)
         self.n_params = walkers[0].params.shape[0]
@@ -14,8 +14,15 @@ class RemdLadder(object):
         # keep track of running averages
         self.n_trials = None
         self._acc = None
-        self._dAupper = None
-        self._dAlower = None
+        self._dA_upper = None
+        self._dA_lower = None
+        self._dE_A_lower = None
+        self._dE_A_upper = None
+        self._dE_upper = None
+        self._dE_lower = None
+        self._A_upper = None
+        self._A_lower = None
+        self.eps = eps
         self.reset_stats()
 
     def reset_stats(self):
@@ -32,17 +39,16 @@ class RemdLadder(object):
 
     def update(self):
         self.n_trials += 1
-
         for w in self.walkers:
             w.update()
 
+        choices = list(range(self.n_walkers - 1))
         for _ in range(self.n_exchanges):
-            i = random.choice(range(self.n_walkers - 1))
+            i = random.choice(choices)
             j = i + 1
 
             accept_prob = self._compute_acceptance(i, j)
-            accept = (True if random.random() <= accept_prob
-                      else False)
+            accept = random.random() <= accept_prob
 
             if accept:
                 w1 = self.walkers[i]
@@ -57,13 +63,15 @@ class RemdLadder(object):
 
     @property
     def derivs(self):
+        n = float(self.n_trials)
+        c = n / (n - 1)  # correct bias in variance
         upper = (self._dA_upper / self.n_trials -
-                 self._dE_A_upper / self.n_trials +
-                 self._dE_upper / self.n_trials *
+                 c * self._dE_A_upper / self.n_trials +
+                 c * self._dE_upper / self.n_trials *
                  self._A_upper[:, np.newaxis] / self.n_trials)
         lower = (self._dA_lower / self.n_trials -
-                 self._dE_A_lower / self.n_trials +
-                 self._dE_lower / self.n_trials *
+                 c * self._dE_A_lower / self.n_trials +
+                 c * self._dE_lower / self.n_trials *
                  self._A_lower[:, np.newaxis] / self.n_trials)
         return (lower, upper)
 
@@ -76,12 +84,11 @@ class RemdLadder(object):
         e12 = w1.get_trial_energy(w2.x)
         e21 = w2.get_trial_energy(w1.x)
 
-        delta = e12 + e21 - e11 - e22
-        if delta < 0:
+        delta = e11 + e22 - e12 - e21
+        if delta >= 0:
             accept = 1.0
         else:
-            accept = math.exp(-delta)
-
+            accept = math.exp(delta)
         return accept
 
     def _update_stats(self):
@@ -93,8 +100,6 @@ class RemdLadder(object):
             self._acc[i] += self._compute_acceptance(i, i+1)
 
     def _update_derivs(self):
-        eps = 1e-6
-
         for i in range(self.n_walkers):
             for upper in [False, True]:
                 j = i + 1 if upper else i - 1
@@ -107,26 +112,26 @@ class RemdLadder(object):
                 acc = self._compute_acceptance(i, j)
                 dE = wi.get_derivs()
 
-                if acc == 1.0:
+                if acc >= 1:
                     dA = np.zeros_like(dE)
                 else:
-                    dA = (acc + eps) * (wi.get_trial_derivs(wi.x) -
-                                        wi.get_trial_derivs(wj.x))
+                    dA = (acc + self.eps) * (wi.get_derivs() -
+                                             wi.get_trial_derivs(wj.x))
 
                 if upper:
                     self._dA_upper[i, :] += dA
-                    self._dE_A_upper[i, :] += (acc + eps) * dE
+                    self._dE_A_upper[i, :] += (acc + self.eps) * dE
                     self._dE_upper[i, :] += dE
-                    self._A_upper[i] += acc + eps
+                    self._A_upper[i] += acc + self.eps
                 else:
                     self._dA_lower[i, :] += dA
-                    self._dE_A_lower[i, :] += (acc + eps) * dE
+                    self._dE_A_lower[i, :] += (acc + self.eps) * dE
                     self._dE_lower[i, :] += dE
-                    self._A_lower[i] += acc + eps
+                    self._A_lower[i] += acc + self.eps
 
 
 class RemdLadder2(object):
-    def __init__(self, init_params, n_exchanges=None):
+    def __init__(self, init_params, n_exchanges=None, eps=1e-9):
         self.params = init_params
         self.n_walkers = init_params.shape[0]
         self.n_params = init_params.shape[1]
@@ -139,6 +144,7 @@ class RemdLadder2(object):
         self._acc = None
         self._dAupper = None
         self._dAlower = None
+        self.eps = eps
         self.reset_stats()
 
     def reset_stats(self):
@@ -167,10 +173,8 @@ class RemdLadder2(object):
 
             if accept:
                 perm[i], perm[j] = perm[j], perm[i]
-                energy_matrix[i, :], energy_matrix[j, :] = energy_matrix[j, :], energy_matrix[i, :]
-                energy_matrix[:, i], energy_matrix[:, j] = energy_matrix[:, j], energy_matrix[:, i]
-                deriv_matrix[i, :], deriv_matrix[j, :] = deriv_matrix[j, :], deriv_matrix[i, :]
-                deriv_matrix[:, i], deriv_matrix[:, j] = deriv_matrix[:, j], deriv_matrix[:, i]
+                energy_matrix[:, [i, j]] = energy_matrix[:, [j, i]]
+                deriv_matrix[:, [i, j]] = deriv_matrix[:, [j, i]]
 
         self._update_stats(energy_matrix, deriv_matrix)
         return perm
@@ -214,8 +218,6 @@ class RemdLadder2(object):
             self._acc[i] += self._compute_acceptance(i, i+1, energy_matrix)
 
     def _update_derivs(self, energy_matrix, deriv_matrix):
-        eps = 1e-6
-
         for i in range(self.n_walkers):
             for upper in [False, True]:
                 j = i + 1 if upper else i - 1
@@ -228,15 +230,15 @@ class RemdLadder2(object):
                 if acc == 1.0:
                     dA = np.zeros_like(dE)
                 else:
-                    dA = (acc + eps) * (deriv_matrix[i, i] - deriv_matrix[i, j])
+                    dA = (acc + self.eps) * (deriv_matrix[i, i] - deriv_matrix[i, j])
 
                 if upper:
                     self._dA_upper[i, :] += dA
-                    self._dE_A_upper[i, :] += (acc + eps) * dE
+                    self._dE_A_upper[i, :] += (acc + self.eps) * dE
                     self._dE_upper[i, :] += dE
-                    self._A_upper[i] += acc + eps
+                    self._A_upper[i] += acc + self.eps
                 else:
                     self._dA_lower[i, :] += dA
-                    self._dE_A_lower[i, :] += (acc + eps) * dE
+                    self._dE_A_lower[i, :] += (acc + self.eps) * dE
                     self._dE_lower[i, :] += dE
-                    self._A_lower[i] += acc + eps
+                    self._A_lower[i] += acc + self.eps
