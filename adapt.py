@@ -13,24 +13,24 @@ def compute_derivative_total_acc(remd):
     for i in range(n_replicas):
         if i > 0:
             A = acc[i - 1]
-            dA = lower_derivs[i]
-            derivs[i] += dA / A
+            dA = lower_derivs[i, :]
+            derivs[i, :] += dA / A * A_total
 
         if i < n_replicas - 1:
             A = acc[i]
-            dA = upper_derivs[i]
-            derivs[i] += dA / A
+            dA = upper_derivs[i, :]
+            derivs[i, :] += dA / A * A_total
 
     # we set the endpoint derivatives to zeros
     # because they are fixed
     derivs[0, :] = 0
     derivs[-1, :] = 0
 
-    return derivs * A_total
+    return derivs
 
 
 def compute_derivative_log_total_acc(remd):
-    acc = remd.acceptance + 1e-9
+    acc = remd.acceptance + remd.eps
 
     lower_derivs, upper_derivs = remd.derivs
 
@@ -204,7 +204,7 @@ class Adam(object):
 
         v = lr * mhat / (np.sqrt(ghat) + 1e-8)
         self.vs.append(v)
-        self.vs.append(derivs)
+        self.derivs.append(derivs)
         params += v
 
         params = np.maximum(params, self.param_bounds[0, :])
@@ -288,10 +288,10 @@ class Adaptor(object):
 
     def run(self, iterations):
         for _ in range(iterations):
+            self.remd.reset_stats()
             for _ in range(self.n_steps):
                 self.remd.update()
 
             self.optimizer.update(self.remd)
             self.params.append(self.optimizer._extract_params(self.remd))
             self.acceptance.append(self.remd.acceptance)
-            self.remd.reset_stats()

@@ -13,7 +13,7 @@ def linear_energy(xs):
 
 @numba.jit
 def logistic_energy(xs):
-    return 50.0 / (1 + np.exp(-0.04 * (xs - 500)))
+    return 20.0 / (1 + np.exp(-0.04 * (xs - 500)))
 
 
 @numba.jit
