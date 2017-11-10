@@ -5,6 +5,7 @@ import simtk.unit as u
 import numpy as np
 import collections
 import math
+from meld.system.openmm_runner import cmap
 
 
 # ideal gas constant
@@ -25,13 +26,14 @@ dist_template = (
 )
 
 class RestrainedProtein(object):
-    def __init__(self, output_index, parm_path, crd_path, init_temp, init_k,
+    def __init__(self, output_index, parm_path, crd_path, init_temp, init_log_k,
                  variable_springs, fixed_springs, fixed_torsions, nsteps=500,
                  output_steps=500, gpuid=None):
         self.output_index = output_index
         self.nsteps = nsteps
         self.temperature = init_temp
-        self.k = init_k
+        self.log_k = init_log_k
+        self.k = np.exp(self.log_k)
 
         prmtop = app.AmberPrmtopFile(parm_path)
         inpcrd = app.AmberInpcrdFile(crd_path)
@@ -40,6 +42,11 @@ class RestrainedProtein(object):
                                           nonbondedCutoff=1.8*u.nanometer,
                                           constraints=app.HBonds,
                                           implicitSolvent=app.OBC2)
+
+        # Add the AMAP correction
+        with open(parm_path) as topfile:
+            mapper = cmap.CMAPAdder(topfile.read())
+        mapper.add_to_openmm(self.system)
 
         #
         # create and add our extra forces
@@ -56,7 +63,7 @@ class RestrainedProtein(object):
 
         # add fixed bonds
         fixed_bond_force = mm.CustomBondForce(dist_template.format(k='k_fixed'))
-        fixed_bond_force.addGlobalParameter('k_fixed', 2000.0)
+        fixed_bond_force.addGlobalParameter('k_fixed', 250.0)
         fixed_bond_force.addPerBondParameter('r1')
         fixed_bond_force.addPerBondParameter('r2')
         fixed_bond_force.addPerBondParameter('r3')
@@ -109,14 +116,17 @@ class RestrainedProtein(object):
 
     @property
     def params(self):
-        return np.array([self.temperature] + list(self.k))
+        return np.array([self.temperature] + list(self.log_k))
 
     @params.setter
     def params(self, new_params):
         old_temp = self.temperature
         self.temperature = new_params[0]
-        self.k = new_params[1:]
+        self.log_k = new_params[1:]
+        self.k = np.exp(self.log_k)
+        self._update_params(old_temp)
 
+    def _update_params(self, old_temp):
         self.integrator.setTemperature(self.temperature)
         for i, val in enumerate(self.k):
             self.simulation.context.setParameter('k_bond{}'.format(i), val)
@@ -171,7 +181,8 @@ class RestrainedProtein(object):
 
         # get the energy without force constants
         old_k = self.k.copy()
-        self.params = np.array([self.temperature] + [0.0] * len(old_k))
+        self.k = np.zeros_like(self.k)
+        self._update_params(self.temperature)
         s = self.simulation.context.getState(getEnergy=True)
         Eref = s.getPotentialEnergy().value_in_unit(u.kilojoule_per_mole)
 
@@ -180,10 +191,12 @@ class RestrainedProtein(object):
         for i in range(len(old_k)):
             p = np.zeros_like(old_k)
             p[i] = 1.0
-            self.params = np.array([self.temperature] + list(p))
+            self.k = p
+            self._update_params(self.temperature)
             s = self.simulation.context.getState(getEnergy=True)
             Ep = s.getPotentialEnergy().value_in_unit(u.kilojoule_per_mole)
-            derivs[i] = (Ep - Eref) / (R * self.temperature)
+            derivs[i] = old_k[i] * (Ep - Eref) / (R * self.temperature)
 
-        self.params = np.array([self.temperature] + list(old_k))
+        self.k = old_k
+        self._update_params(self.temperature)
         return np.array([dT] + list(derivs))

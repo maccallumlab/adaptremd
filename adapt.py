@@ -30,7 +30,7 @@ def compute_derivative_total_acc(remd):
 
 
 def compute_derivative_log_total_acc(remd):
-    acc = remd.acceptance + 1e-6
+    acc = remd.acceptance + 1e-9
 
     lower_derivs, upper_derivs = remd.derivs
 
@@ -40,13 +40,13 @@ def compute_derivative_log_total_acc(remd):
     for i in range(n_replicas):
         if i > 0:
             A = acc[i - 1]
-            dA = lower_derivs[i]
-            derivs[i] += dA / A
+            dA = lower_derivs[i, :]
+            derivs[i, :] += dA / A
 
         if i < n_replicas - 1:
             A = acc[i]
-            dA = upper_derivs[i]
-            derivs[i] += dA / A
+            dA = upper_derivs[i, :]
+            derivs[i, :] += dA / A
 
     # we set the endpoint derivatives to zeros
     # because they are fixed

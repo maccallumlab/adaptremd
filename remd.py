@@ -167,10 +167,10 @@ class RemdLadder2(object):
 
             if accept:
                 perm[i], perm[j] = perm[j], perm[i]
-                energy_matrix[i, :], energy_matrix[j, :] = energy_matrix[j, :], energy_matrix[i, :]
-                energy_matrix[:, i], energy_matrix[:, j] = energy_matrix[:, j], energy_matrix[:, i]
-                deriv_matrix[i, :], deriv_matrix[j, :] = deriv_matrix[j, :], deriv_matrix[i, :]
-                deriv_matrix[:, i], deriv_matrix[:, j] = deriv_matrix[:, j], deriv_matrix[:, i]
+                # energy_matrix[i, :], energy_matrix[j, :] = energy_matrix[j, :], energy_matrix[i, :].copy()
+                energy_matrix[:, i], energy_matrix[:, j] = energy_matrix[:, j], energy_matrix[:, i].copy()
+                # deriv_matrix[i, :], deriv_matrix[j, :] = deriv_matrix[j, :], deriv_matrix[i, :].copy()
+                deriv_matrix[:, i], deriv_matrix[:, j] = deriv_matrix[:, j], deriv_matrix[:, i].copy()
 
         self._update_stats(energy_matrix, deriv_matrix)
         return perm
@@ -181,13 +181,14 @@ class RemdLadder2(object):
 
     @property
     def derivs(self):
+        n = float(self.n_trials)
         upper = (self._dA_upper / self.n_trials -
-                 self._dE_A_upper / self.n_trials +
-                 self._dE_upper / self.n_trials *
+                 n/(n-1)*self._dE_A_upper / self.n_trials +
+                 n/(n-1)*self._dE_upper / self.n_trials *
                  self._A_upper[:, np.newaxis] / self.n_trials)
         lower = (self._dA_lower / self.n_trials -
-                 self._dE_A_lower / self.n_trials +
-                 self._dE_lower / self.n_trials *
+                 n/(n-1)*self._dE_A_lower / self.n_trials +
+                 n/(n-1)*self._dE_lower / self.n_trials *
                  self._A_lower[:, np.newaxis] / self.n_trials)
         return (lower, upper)
 
@@ -214,7 +215,7 @@ class RemdLadder2(object):
             self._acc[i] += self._compute_acceptance(i, i+1, energy_matrix)
 
     def _update_derivs(self, energy_matrix, deriv_matrix):
-        eps = 1e-6
+        eps = 1e-9
 
         for i in range(self.n_walkers):
             for upper in [False, True]:
