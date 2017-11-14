@@ -43,6 +43,7 @@ def run_master(comm, adapt_iter, r, l, fixed_torsions,
     param_history = []
     param_history.append(r.params.copy())
     accept_history = []
+    steps_history = []
 
     # setup walker history
     walker_perm = list(range(n_replicas))
@@ -104,9 +105,13 @@ def run_master(comm, adapt_iter, r, l, fixed_torsions,
         # do update if it's time
         if adapt_step.update:
             l.update(r, adapt_step.learning_rate)
+            steps_history.append(adapt_step.step)
 
         # do output if it's time
         if adapt_step.update or adapt_step.output_only:
+            with open('steps.pkl', 'w') as outfile:
+                pickle.dump(steps_history, outfile)
+
             param_history.append(r.params.copy())
             with open('params.pkl', 'w') as outfile:
                 pickle.dump(param_history, outfile)
