@@ -9,7 +9,7 @@ from mpi4py import MPI
 
 if __name__ == '__main__':
     comm = MPI.COMM_WORLD
-    N = 24
+    N = 12
     init_params = np.zeros((N, 2))
     # init_params[:, 0] = np.linspace(300, 400, N)
     # init_params[-1, 0] = 700.
@@ -18,7 +18,7 @@ if __name__ == '__main__':
     param_bounds = np.array([[300.0, -10.], [450.0, 5.52]])
     r = remd.RemdLadder2(init_params)
     lr = adapt.LearningRateDecay(np.array((1., 0.1)), 0.0)
-    m = adapt.Adam2(0.9, 0.9, adapt.compute_derivative_log_total_acc, lr, param_bounds)
+    m = adapt.Adam2(0.9, 0.9, adapt.compute_derivative_log_total_acc, param_bounds)
 
     torsions = []
     with open('torsions.dat') as infile:
@@ -63,5 +63,14 @@ if __name__ == '__main__':
     topname = 'topol.top'
     crdname = 'inpcrd.crd'
 
-    parallel_remd.run(comm, 100000, r, m, update_every=56, output_every=64, burn_in=8, fixed_torsions=torsions,
-                      fixed_bonds=fixed_bonds, variable_bonds=variable_bonds, topname=topname, crdname=crdname)
+    adapt_iter = adapt.AdaptationIter(max_steps=100000,
+                                      discard_first_steps=1000,
+                                      init_cycle_length=16,
+                                      cycle_length_doubling_cycles=50,
+                                      fraction_batch_discard=0.5,
+                                      learning_rate_decay_cycles=50,
+                                      init_learning_rate=np.array([4, 0.2]))
+
+    parallel_remd.run(comm, adapt_iter, r, m, fixed_torsions=torsions,
+                      fixed_bonds=fixed_bonds, variable_bonds=variable_bonds,
+                      topname=topname, crdname=crdname)
