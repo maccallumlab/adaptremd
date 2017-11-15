@@ -12,11 +12,11 @@ init_temperatures = [10., 5000., 5000., 10000.]
 
 T2 = 10 * (10000 / 10) ** (1.0 / 3.0)
 T3 = 10 * (10000 / 10) ** (2.0 / 3.0)
-decays = list(reversed([1e-2, 0.5e-2, 0.25e-2, 0.125e-2]))
+gammas = [1.0] + [2.0 ** (1.0 / n) for n in [320, 80, 20]]
 
-fig, axes = pp.subplots(1, len(decays), sharex=True, sharey=True, figsize=(6, 2))
+fig, axes = pp.subplots(1, len(gammas), sharex=True, sharey=True, figsize=(6, 2))
 
-for i, decay in enumerate(decays):
+for i, gamma in enumerate(gammas):
     walkers = []
     for t in init_temperatures:
         w = HarmonicLandscape(t)
@@ -24,14 +24,14 @@ for i, decay in enumerate(decays):
 
     r = RemdLadder(walkers)
 
-    lr = adapt.LearningRateDecay(np.array((50.0,)), decay)
+    lr = adapt.LearningRateDecay(np.array((25.0,)), 0)
     param_bounds = np.array([[10], [10000]])
     m = adapt.Adam(0.9,
                    0.9,
                    adapt.compute_derivative_log_total_acc,
                    lr,
                    param_bounds)
-    a = adapt.ExponentialAdaptor(r, 64, 1.0, m)
+    a = adapt.ExponentialAdaptor(r, 4, gamma, m)
 
     target_iter = 100000
     iterations = a.min_iterations_for_target_steps(target_iter)
@@ -52,7 +52,7 @@ axes[0].set_ylabel('$x_0$')
 for i in range(4):
     axes[i].set_xlabel('Steps')
 
-for i, gamma in enumerate(decays):
+for i, gamma in enumerate(gammas):
     ax = axes[i]
     ax.text(0.5, 1.1, r'$\gamma={:.3f}$'.format(gamma), transform=ax.transAxes,
             horizontalalignment='center', weight='bold')
@@ -62,4 +62,4 @@ pp.figtext(0.5, 0.90, u'Adaptation Decays More Quickly \N{RIGHTWARDS ARROW}',
 
 fig.subplots_adjust(top=0.75, bottom=0.25)
 
-pp.savefig('decay.pdf')
+pp.savefig('adapt.pdf')

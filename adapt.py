@@ -1,5 +1,9 @@
 import numpy as np
+<<<<<<< 71ef6c480f52062720d83ce6ed479d90fb53bd7b
 from collections import namedtuple
+=======
+import itertools
+>>>>>>> Updated plots
 
 
 def compute_derivative_total_acc(remd):
@@ -436,3 +440,38 @@ class AdaptationIter(object):
 
     def handle_step_done(self):
         raise StopIteration
+
+class ExponentialAdaptor(object):
+    def __init__(self, remd, eta_init, gamma, optimizer):
+        self.remd = remd
+        self.eta_init = float(eta_init)
+        self.gamma = float(gamma)
+        self.current_step = 0
+        self.optimizer = optimizer
+        self.params = []
+        self.params.append(self.optimizer._extract_params(self.remd))
+        self.acceptance = []
+        self.adapted_at = [0]
+
+    def run(self, iterations):
+        for iteration in range(iterations):
+            self.remd.reset_stats()
+            for _ in range(self._compute_steps(iteration)):
+                self.remd.update()
+            self.current_step += self._compute_steps(iteration)
+
+            self.optimizer.update(self.remd)
+            self.params.append(self.optimizer._extract_params(self.remd))
+            self.acceptance.append(self.remd.acceptance)
+            self.adapted_at.append(self.current_step)
+
+    def min_iterations_for_target_steps(self, target):
+        steps = 0
+        for i in itertools.count():
+            steps += self._compute_steps(i)
+            if steps > target:
+                break
+        return i
+
+    def _compute_steps(self, iteration):
+        return int(self.eta_init * self.gamma ** iteration)
